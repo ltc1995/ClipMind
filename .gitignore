@@ -1,11 +1,20 @@
-﻿*.spec
+﻿# 打包产物
+*.spec
 build/
 dist/
+
+# Python
 __pycache__/
 *.pyc
 .venv/
+
+# 用户数据(剪贴板历史,含隐私)
 data/
 *.db
 tmp/
 
+# IDE
 .idea/
+
+# kanban 多 agent worktree(本地编排用,不发布)
+.worktrees/
