@@ -33,13 +33,13 @@
 
 ### 方式一:直接运行 exe(推荐)
 
-从 [Releases](https://github.com/lintiancheng/ClipMind/releases) 下载 `ClipMind.exe`,双击运行即可。数据保存在 exe 同目录的 `data/` 文件夹。
+从 [Releases](https://github.com/ltc1995/ClipMind/releases) 下载 `ClipMind.exe`,双击运行即可。数据保存在 exe 同目录的 `data/` 文件夹。
 
 ### 方式二:源码运行
 
 ```bash
 # 1. 克隆仓库
-git clone https://github.com/lintiancheng/ClipMind.git
+git clone https://github.com/ltc1995/ClipMind.git
 cd ClipMind
 
 # 2. 安装依赖(建议使用虚拟环境)
