@@ -13,6 +13,12 @@ from database.db import Database
 from utils.config import CODE_LANG_KEYWORDS, CONTENT_TYPE_TEXT, CONTENT_TYPE_CODE, CONTENT_TYPE_IMAGE, IMAGE_DIR
 
 class ClipboardManager:
+    # 截图工具框选/确认过程中可能向剪贴板写入多张尺寸相差 1-2px 的同一截图，
+    # 在该时间窗口内做重叠区域像素比对去重
+    _RECENT_IMAGE_WINDOW = 5.0
+    _MAX_RECENT_IMAGES = 3
+    _MAX_SIZE_DIFF = 2
+
     def __init__(self, db):
         self.db = db
         self._last_content = None
@@ -20,6 +26,7 @@ class ClipboardManager:
         self._recently_deleted = set()
         self._last_self_copy_key = None
         self._last_self_copy_at = 0.0
+        self._recent_images = []  # [(monotonic_ts, QImage)] 最近保存的图片
         os.makedirs(IMAGE_DIR, exist_ok=True)
 
     def _get_clipboard(self):
@@ -41,6 +48,47 @@ class ClipboardManager:
             return ""
         raw = bytes(img.constBits())
         return hashlib.md5(f"{img.width()}x{img.height()}:".encode() + raw).hexdigest()
+
+    @staticmethod
+    def _images_identical_overlap(a: QImage, b: QImage) -> bool:
+        """两张图重叠区域是否像素完全一致（允许尺寸差 _MAX_SIZE_DIFF）。"""
+        if a.isNull() or b.isNull():
+            return False
+        ra = a.convertToFormat(QImage.Format.Format_RGBA8888)
+        rb = b.convertToFormat(QImage.Format.Format_RGBA8888)
+        if abs(ra.width() - rb.width()) > ClipboardManager._MAX_SIZE_DIFF or \
+                abs(ra.height() - rb.height()) > ClipboardManager._MAX_SIZE_DIFF:
+            return False
+        w = min(ra.width(), rb.width())
+        h = min(ra.height(), rb.height())
+        if w <= 0 or h <= 0:
+            return False
+        la, lb = ra.bytesPerLine(), rb.bytesPerLine()
+        ba, bb = bytes(ra.constBits()), bytes(rb.constBits())
+        row = w * 4
+        for y in range(h):
+            if ba[y * la: y * la + row] != bb[y * lb: y * lb + row]:
+                return False
+        return True
+
+    def _is_duplicate_of_recent(self, image: QImage) -> bool:
+        """与最近保存过的图片比较：重叠区域完全一致 → 视为同一次截图被重复写入剪贴板。"""
+        now = time.monotonic()
+        self._recent_images = [(ts, img) for ts, img in self._recent_images
+                               if now - ts <= self._RECENT_IMAGE_WINDOW]
+        for _, saved in self._recent_images:
+            if self._images_identical_overlap(image, saved):
+                return True
+        return False
+
+    def _note_recent_image(self, image: QImage):
+        """记录刚保存的图片，用于短时间窗口内的相似去重。"""
+        now = time.monotonic()
+        self._recent_images.append((now, image))
+        self._recent_images = [(ts, img) for ts, img in self._recent_images
+                               if now - ts <= self._RECENT_IMAGE_WINDOW]
+        if len(self._recent_images) > self._MAX_RECENT_IMAGES:
+            self._recent_images = self._recent_images[-self._MAX_RECENT_IMAGES:]
 
     def _note_self_copy(self, key):
         self._last_self_copy_key = key
@@ -137,6 +185,9 @@ class ClipboardManager:
                 existing.created_time = now
                 existing.updated_time = now
                 return existing
+            if self._is_duplicate_of_recent(image):
+                # 与刚保存过的图片重叠区域一致（截图工具的重复写入），丢弃
+                return None
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             filename = f"{timestamp}_{image_hash[:8]}.png"
             filepath = os.path.join(IMAGE_DIR, filename)
@@ -148,6 +199,7 @@ class ClipboardManager:
                                  image_path=filepath)
             item_id = self.db.add_item(item)
             item.id = item_id
+            self._note_recent_image(image)
             return item
         except Exception as e:
             print(f"Image capture error: {e}")

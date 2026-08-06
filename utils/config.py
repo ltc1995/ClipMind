@@ -7,7 +7,7 @@ from pathlib import Path
 
 # 应用信息
 APP_NAME = 'ClipMind'
-APP_VERSION = '1.0.2'
+APP_VERSION = '1.0.3'
 APP_DESCRIPTION = '\u667a\u80fd\u526a\u8d34\u677f\u52a9\u624b'
 APP_AUTHOR = 'ClipMind'
 
